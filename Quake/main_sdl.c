@@ -148,8 +148,10 @@ int main(int argc, char *argv[])
 
 		Host_Frame (time);
 
+		/*
 		if (time < sys_throttle.value)
 			SDL_Delay(1);
+		*/
 
 		oldtime = newtime;
 	}

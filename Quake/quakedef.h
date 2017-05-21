@@ -45,6 +45,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //define	PARANOID			// speed sapping error checking
 
 #define	GAMENAME	"id1"		// directory to look in by default
+#define LOGFILENAME "vkQuake_Sys_Printf.log"
 
 #include "q_stdinc.h"
 
@@ -229,6 +230,7 @@ typedef struct
 #define VK_USE_PLATFORM_WIN32_KHR
 #endif
 #include <vulkan/vulkan.h>
+#include <openvr.h>
 
 #ifndef APIENTRY
 #define	APIENTRY

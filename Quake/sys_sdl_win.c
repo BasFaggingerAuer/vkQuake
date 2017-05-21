@@ -214,6 +214,12 @@ static void Sys_SetTimerResolution(void)
 
 void Sys_Init (void)
 {
+	//Create log file.
+	FILE *fid = fopen(LOGFILENAME, "w");
+
+	fprintf(fid, "vkQuake\nSys_Init\n");
+	fclose(fid);
+
 	Sys_SetTimerResolution ();
 	Sys_SetDPIAware ();
 
@@ -268,6 +274,14 @@ void Sys_Error (const char *error, ...)
 	q_vsnprintf (text, sizeof(text), error, argptr);
 	va_end (argptr);
 
+	if (true)
+	{
+		FILE *fid = fopen(LOGFILENAME, "a");
+
+		fputs(text, fid);
+		fclose(fid);
+	}
+
 	if (isDedicated)
 		WriteFile (houtput, errortxt1, strlen(errortxt1), &dummy, NULL);
 	/* SDL will put these into its own stderr log,
@@ -312,6 +326,13 @@ void Sys_Printf (const char *fmt, ...)
 	{
 	/* SDL will put these into its own stdout log,
 	   so print to stdout even in graphical mode. */
+		
+		//Well, apparently not anymore, we will do this ourselves.
+		FILE *fid = fopen(LOGFILENAME, "a");
+
+		fputs(text, fid);
+		fclose(fid);
+
 		fputs (text, stdout);
 		OutputDebugStringA(text);
 	}
@@ -401,7 +422,7 @@ const char *Sys_ConsoleInput (void)
 void Sys_Sleep (unsigned long msecs)
 {
 /*	Sleep (msecs);*/
-	SDL_Delay (msecs);
+	//SDL_Delay (msecs);
 }
 
 void Sys_SendKeyEvents (void)

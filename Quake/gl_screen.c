@@ -975,11 +975,12 @@ void SCR_UpdateScreen (void)
 
 	V_RenderView ();
 
-	GL_Set2D ();
+	GL_Set2D();
 
 	//FIXME: only call this when needed
-	SCR_TileClear ();
+	//SCR_TileClear();
 
+	/*
 	if (scr_drawdialog) //new game confirm
 	{
 		if (con_forcedup)
@@ -1019,7 +1020,8 @@ void SCR_UpdateScreen (void)
 		M_Draw ();
 	}
 
-	V_UpdateBlend (); //johnfitz -- V_UpdatePalette cleaned up and renamed
+	*/
+	V_UpdateBlend(); //johnfitz -- V_UpdatePalette cleaned up and renamed
 
 	GL_EndRendering ();
 }

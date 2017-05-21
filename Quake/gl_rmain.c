@@ -542,7 +542,7 @@ void R_RenderScene (void)
 
 	Fog_DisableGFog (); //johnfitz
 
-	R_DrawViewModel (); //johnfitz -- moved here from R_RenderView
+	//R_DrawViewModel (); //johnfitz -- moved here from R_RenderView
 }
 
 /*

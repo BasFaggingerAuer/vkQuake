@@ -1,4 +1,9 @@
 # Overview
+
+This is a small experiment to learn using the Vulkan and OpenVR libraries and to bring Quake to the Vive in the process.
+This project is a fork from [vkQuake](https://github.com/Novum/vkQuake) developed by Axel Gneiting.
+At this time, OpenVR support is still being developed, no releases are available, and only Visual Studio compilation is supported.
+
 vkQuake is a Quake 1 port using Vulkan instead of OpenGL for rendering. It is based on the popular [QuakeSpasm](http://quakespasm.sourceforge.net/) port and runs all mods compatible with it like [Arcane Dimensions](https://www.quaddicted.com/reviews/ad_v1_50final.html) or [In The Shadows](http://www.moddb.com/mods/its).
 
 Compared to QuakeSpasm vkQuake also features a software Quake like underwater effect, has better color precision, generates mipmap for water surfaces at runtime and has native support for anti-aliasing and AF.
@@ -14,6 +19,7 @@ Prerequisites:
 * [Git for Windows](https://github.com/git-for-windows/git/releases)
 * [Vulkan SDK](https://vulkan.lunarg.com/signin) (download link is on the bottom of page)
 * A [Vulkan-capable GPU](https://en.wikipedia.org/wiki/Vulkan_(API)#Compatibility) with the appropriate drivers installed
+* [OpenVR](https://github.com/ValveSoftware/openvr)
 
 Start `Git Bash` and clone the vkQuake repo:
 
@@ -29,6 +35,8 @@ Open the Visual Studio solution, `Windows\VisualStudio\vkquake.sln`, select the 
 build the solution.
 
 ### MinGW
+
+MinGW is currently not supported.
 
 Download the latest release of [MinGW-w64](https://sourceforge.net/projects/mingw-w64/files/latest/download) and install it:
 
@@ -61,6 +69,8 @@ make USE_SDL2=1 -f Makefile.w64
 ~~~
 
 ## Linux
+
+Linux is currently not supported.
 
 Make sure that both your [GPU](https://en.wikipedia.org/wiki/Vulkan_(API)#Compatibility) and your GPU driver supports Vulkan.
 

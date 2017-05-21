@@ -33,6 +33,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <X11/Xlib-xcb.h> /* for XGetXCBConnection() */
 #endif
 
+#include "string_functions.h"
+
 #define MAX_MODE_LIST	600 //johnfitz -- was 30
 #define MAX_BPPS_LIST	5
 #define MAXWIDTH		10000
@@ -134,6 +136,13 @@ static PFN_vkDestroySwapchainKHR fpDestroySwapchainKHR;
 static PFN_vkGetSwapchainImagesKHR fpGetSwapchainImagesKHR;
 static PFN_vkAcquireNextImageKHR fpAcquireNextImageKHR;
 static PFN_vkQueuePresentKHR fpQueuePresentKHR;
+
+//OpenVR (sigh, global variables, "When in Rome ...").
+static vr::IVRSystem *				vr_system;
+static vr::IVRRenderModels *		vr_render_models;
+static uint32_t						vr_render_target_width;
+static uint32_t						vr_render_target_height;
+const float							vr_near_clip = 0.1f, vr_far_clip = 30.0f;
 
 #ifdef _DEBUG
 static PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallbackEXT;
@@ -541,8 +550,12 @@ static void GL_InitInstance( void )
 						malloc(sizeof(VkExtensionProperties) * instance_extension_count);
 		err = vkEnumerateInstanceExtensionProperties(NULL, &instance_extension_count, instance_extensions);
 
+		Con_Printf("Found %d Vulkan instance extensions:\n", instance_extension_count);
+
 		for (i = 0; i < instance_extension_count; ++i)
 		{
+			Con_Printf("    %s\n", instance_extensions[i].extensionName);
+
 			if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, instance_extensions[i].extensionName) == 0)
 			{
 				found_surface_extensions++;
@@ -565,7 +578,60 @@ static void GL_InitInstance( void )
 
 	if(found_surface_extensions != 2)
 		Sys_Error("Couldn't find %s/%s extensions", VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURF_EXT);
+
+	//Initialize OpenVR. (From cube_openvr.cpp.)
+	vr::EVRInitError vr_error = vr::VRInitError_None;
+
+	vr_system = vr::VR_Init(&vr_error, vr::VRApplication_Scene);
+
+	if (vr_error != vr::VRInitError_None)
+		Sys_Error("Unable to initialize OpenVR!\n");
+
+	Con_Printf("Initialized OpenVR\n");
+
+	vr_render_models = (vr::IVRRenderModels *)vr::VR_GetGenericInterface(vr::IVRRenderModels_Version, &vr_error);
+
+	if (!vr_render_models)
+		Sys_Error("Unable to initialize OpenVR render models!\n");
+
+	if (!vr::VRCompositor())
+		Sys_Error("Unable to initialize OpenVR compositor!\n");
+
+	vr_system->GetRecommendedRenderTargetSize(&vr_render_target_width, &vr_render_target_height);
+
+	Con_Printf("OpenVR recommended render target size %ux%u\n", vr_render_target_width, vr_render_target_height);
 	
+	//Get OpenVR required extensions.
+	std::vector<std::string> vk_instance_extensions;
+
+	vk_instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+	vk_instance_extensions.push_back(PLATFORM_SURF_EXT);
+	vk_instance_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+
+	if (true)
+	{
+		const auto nr_chars = vr::VRCompositor()->GetVulkanInstanceExtensionsRequired(nullptr, 0);
+
+		if (nr_chars > 0)
+		{
+			std::vector<char> extension_list_string(nr_chars, 0);
+
+			vr::VRCompositor()->GetVulkanInstanceExtensionsRequired(extension_list_string.data(), nr_chars);
+			strsplit(std::string(extension_list_string.data()), ' ', std::back_inserter(vk_instance_extensions));
+		}
+	}
+
+	//Create Vulkan interface.
+	Con_Printf("Requested Vulkan interface extensions:\n");
+
+	for (auto i = vk_instance_extensions.cbegin(); i != vk_instance_extensions.cend(); ++i)
+	{
+		Con_Printf("    %s\n", i->c_str());
+	}
+
+	char **instance_extensions = NULL;
+	size_t nr_instance_extensions = get_C_strings(vk_instance_extensions, &instance_extensions);
+
 	VkApplicationInfo application_info;
 	memset(&application_info, 0, sizeof(application_info));
 	application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -575,13 +641,13 @@ static void GL_InitInstance( void )
 	application_info.engineVersion = 1;
 	application_info.apiVersion = VK_API_VERSION_1_0;
 
-	const char * const instance_extensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURF_EXT, VK_EXT_DEBUG_REPORT_EXTENSION_NAME };
+	//const char * const instance_extensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURF_EXT, VK_EXT_DEBUG_REPORT_EXTENSION_NAME };
 
 	VkInstanceCreateInfo instance_create_info;
 	memset(&instance_create_info, 0, sizeof(instance_create_info));
 	instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instance_create_info.pApplicationInfo = &application_info;
-	instance_create_info.enabledExtensionCount = 2;
+	instance_create_info.enabledExtensionCount = nr_instance_extensions;
 	instance_create_info.ppEnabledExtensionNames = instance_extensions;
 #ifdef _DEBUG
 	const char * const layer_names[] = { "VK_LAYER_LUNARG_standard_validation" };
@@ -598,6 +664,13 @@ static void GL_InitInstance( void )
 	err = vkCreateInstance(&instance_create_info, NULL, &vulkan_instance);
 	if (err != VK_SUCCESS)
 		Sys_Error("Couldn't create Vulkan instance");
+
+	for (size_t i = 0; i < nr_instance_extensions; ++i)
+	{
+		free(instance_extensions[i]);
+	}
+
+	free(instance_extensions);
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 	VkWin32SurfaceCreateInfoKHR surface_create_info;
@@ -681,8 +754,12 @@ static void GL_InitDevice( void )
 		VkExtensionProperties *device_extensions = (VkExtensionProperties *) malloc(sizeof(VkExtensionProperties) * device_extension_count);
 		err = vkEnumerateDeviceExtensionProperties(vulkan_physical_device, NULL, &device_extension_count, device_extensions);
 
+		Con_Printf("Found %d Vulkan device extensions:\n", device_extension_count);
+
 		for (i = 0; i < device_extension_count; ++i)
 		{
+			Con_Printf("    %s\n", device_extensions[i].extensionName);
+
 			if (strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, device_extensions[i].extensionName) == 0)
 			{
 				found_swapchain_extension = true;
@@ -758,7 +835,39 @@ static void GL_InitDevice( void )
 	queue_create_info.queueCount = 1;
 	queue_create_info.pQueuePriorities = queue_priorities;
 
-	const char * const device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEBUG_MARKER_EXTENSION_NAME };
+
+	//Get OpenVR required extensions.
+	std::vector<std::string> vk_device_extensions;
+
+	vk_device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	//vk_device_extensions.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+	
+	if (true)
+	{
+		const auto nr_chars = vr::VRCompositor()->GetVulkanDeviceExtensionsRequired(vulkan_physical_device, nullptr, 0);
+
+		if (nr_chars > 0)
+		{
+			std::vector<char> extension_list_string(nr_chars, 0);
+
+			vr::VRCompositor()->GetVulkanDeviceExtensionsRequired(vulkan_physical_device, extension_list_string.data(), nr_chars);
+			strsplit(std::string(extension_list_string.data()), ' ', std::back_inserter(vk_device_extensions));
+		}
+	}
+
+	//Create Vulkan interface.
+	Con_Printf("Requested Vulkan interface extensions:\n");
+
+	for (auto i = vk_device_extensions.cbegin(); i != vk_device_extensions.cend(); ++i)
+	{
+		Con_Printf("    %s\n", i->c_str());
+	}
+
+	char **device_extensions = NULL;
+	size_t nr_device_extensions = get_C_strings(vk_device_extensions, &device_extensions);
+
+
+	//const char * const device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEBUG_MARKER_EXTENSION_NAME };
 
 	vkGetPhysicalDeviceFeatures(vulkan_physical_device, &vulkan_physical_device_features);
 	const VkBool32 extended_format_support = vulkan_physical_device_features.shaderStorageImageExtendedFormats;
@@ -774,7 +883,7 @@ static void GL_InitDevice( void )
 	device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	device_create_info.queueCreateInfoCount = 1;
 	device_create_info.pQueueCreateInfos = &queue_create_info;
-	device_create_info.enabledExtensionCount = 1;
+	device_create_info.enabledExtensionCount = nr_device_extensions;
 	device_create_info.ppEnabledExtensionNames = device_extensions;
 	device_create_info.pEnabledFeatures = &device_features;
 #if _DEBUG
@@ -791,6 +900,13 @@ static void GL_InitDevice( void )
 	GET_DEVICE_PROC_ADDR(vulkan_globals.device, GetSwapchainImagesKHR);
 	GET_DEVICE_PROC_ADDR(vulkan_globals.device, AcquireNextImageKHR);
 	GET_DEVICE_PROC_ADDR(vulkan_globals.device, QueuePresentKHR);
+
+	for (size_t i = 0; i < nr_device_extensions; ++i)
+	{
+		free(device_extensions[i]);
+	}
+
+	free(device_extensions);
 
 #if _DEBUG
 	if (found_debug_marker_extension)
@@ -1461,10 +1577,6 @@ static void GL_CreateSwapChain( void )
 	swapchain_create_info.presentMode = present_mode;
 	swapchain_create_info.clipped = true;
 	swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	// Not all devices support ALPHA_OPAQUE
-	if (!(vulkan_surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR))
-		swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-
 
 	vulkan_globals.swap_chain_format = surface_formats[0].format;
 	free(surface_formats);
@@ -1831,6 +1943,8 @@ void VID_Shutdown (void)
 {
 	if (vid_initialized)
 	{
+		vr::VR_Shutdown();
+
 		SDL_QuitSubSystem(SDL_INIT_VIDEO);
 		draw_context = NULL;
 		PL_VID_Shutdown();
@@ -2876,7 +2990,7 @@ void SCR_ScreenShot_f (void)
 	vkMapMemory(vulkan_globals.device, memory, 0, glwidth * glheight * 4, 0, &buffer_ptr);
 
 // now write the file
-	if (Image_WriteTGA (tganame, buffer_ptr, glwidth, glheight, 32, true, bgra))
+	if (Image_WriteTGA (tganame, reinterpret_cast<byte *>(buffer_ptr), glwidth, glheight, 32, true, bgra))
 		Con_Printf ("Wrote %s\n", tganame);
 	else
 		Con_Printf ("SCR_ScreenShot_f: Couldn't create a TGA file\n");
