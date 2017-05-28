@@ -144,6 +144,7 @@ static uint32_t						vr_render_target_width;
 static uint32_t						vr_render_target_height;
 const float							vr_near_clip = 0.1f, vr_far_clip = 30.0f;
 static vr::TrackedDevicePose_t		vr_tracked_device_poses[vr::k_unMaxTrackedDeviceCount];
+const float							vr_scale_factor = 32.0f, vr_actor_height = 1.8f;
 
 #ifdef _DEBUG
 static PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallbackEXT;
@@ -152,7 +153,7 @@ PFN_vkDebugMarkerSetObjectNameEXT fpDebugMarkerSetObjectNameEXT;
 
 VkDebugReportCallbackEXT debug_report_callback;
 
-void VID_Update_VR_Poses(vec3_t forward, vec3_t right, vec3_t up)
+void VID_Update_VR_Poses(float *orientation_matrix)
 {
 	//Query VR set for poses.
 	vr::VRCompositor()->WaitGetPoses(vr_tracked_device_poses, vr::k_unMaxTrackedDeviceCount, NULL, 0);
@@ -162,8 +163,6 @@ void VID_Update_VR_Poses(vec3_t forward, vec3_t right, vec3_t up)
 		//Extract vectors from tracking transformation matrix.
 		//TODO: Include eye matrices.
 		const auto m = vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking.m;
-
-		float orientation_matrix[16];
 
 		orientation_matrix[0 * 4 + 0] = m[0][0];
 		orientation_matrix[0 * 4 + 1] = m[1][0];
@@ -180,10 +179,9 @@ void VID_Update_VR_Poses(vec3_t forward, vec3_t right, vec3_t up)
 		orientation_matrix[2 * 4 + 2] = m[2][2];
 		orientation_matrix[2 * 4 + 3] = 0.0f;
 
-		//TODO: Include translations.
-		orientation_matrix[3 * 4 + 0] = 0.0f;
-		orientation_matrix[3 * 4 + 1] = 0.0f;
-		orientation_matrix[3 * 4 + 2] = 0.0f;
+		orientation_matrix[3 * 4 + 0] = vr_scale_factor*m[0][3];
+		orientation_matrix[3 * 4 + 1] = vr_scale_factor*(m[1][3] - vr_actor_height);
+		orientation_matrix[3 * 4 + 2] = vr_scale_factor*m[2][3];
 		orientation_matrix[3 * 4 + 3] = 1.0f;
 
 		//Perform some rotations to make the OpenVR and Quake coordinate systems agree with each other.
@@ -201,9 +199,11 @@ void VID_Update_VR_Poses(vec3_t forward, vec3_t right, vec3_t up)
 		memcpy(orientation_matrix, work_matrix, 16 * sizeof(float));
 
 		//Copy to vectors.
+		/*
 		memcpy(right,	&orientation_matrix[0 * 4 + 0], 3 * sizeof(float));
 		memcpy(up,		&orientation_matrix[1 * 4 + 0], 3 * sizeof(float));
 		memcpy(forward, &orientation_matrix[2 * 4 + 0], 3 * sizeof(float));
+		*/
 	}
 }
 

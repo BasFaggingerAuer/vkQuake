@@ -341,7 +341,7 @@ void R_SetupMatrix (void)
 	RotationMatrixFromVectorsTransposed(vulkan_globals.view_matrix, vpn, vright, vup);
 	
 	float translation_matrix[16];
-	TranslationMatrix(translation_matrix, -r_refdef.vieworg[0], -r_refdef.vieworg[1], -r_refdef.vieworg[2]);
+	TranslationMatrix(translation_matrix, -r_origin[0], -r_origin[1], -r_origin[2]);
 	MatrixMultiply(vulkan_globals.view_matrix, translation_matrix);
 
 	// View projection matrix
@@ -375,13 +375,19 @@ void R_SetupView (void)
 {
 	Fog_SetupFrame (); //johnfitz
 
-// build the transformation matrix for the given view angles
-	//TODO: Include VR pose in position.
-	VectorCopy (r_refdef.vieworg, r_origin);
+	//Get VR orientation matrix.
+	//TODO: Add eye dependencies.
+	float orientation_matrix[16];
 
-	//AngleVectors (r_refdef.viewangles, vpn, vright, vup);
-	//Get current pose from OpenVR.
-	VID_Update_VR_Poses(vpn, vright, vup);
+	VID_Update_VR_Poses(orientation_matrix);
+
+	//Update rendering variables.
+	VectorCopy(r_refdef.vieworg, r_origin);
+	VectorAdd(r_origin, &orientation_matrix[3 * 4 + 0], r_origin);
+
+	VectorCopy(&orientation_matrix[0 * 4 + 0], vright);
+	VectorCopy(&orientation_matrix[1 * 4 + 0], vup);
+	VectorCopy(&orientation_matrix[2 * 4 + 0], vpn);
 	
 // current viewleaf
 	r_oldviewleaf = r_viewleaf;

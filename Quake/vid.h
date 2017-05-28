@@ -82,7 +82,7 @@ void VID_SyncCvars (void);
 
 void VID_Toggle (void);
 
-void VID_Update_VR_Poses(vec3_t forward, vec3_t right, vec3_t up);
+void VID_Update_VR_Poses(float *orientation_matrix);
 
 void *VID_GetWindow (void);
 qboolean VID_HasMouseOrInputFocus (void);
