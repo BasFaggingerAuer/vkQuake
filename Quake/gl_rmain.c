@@ -324,6 +324,7 @@ void R_SetupMatrix (void)
 	GL_FrustumMatrix(vulkan_globals.projection_matrix, DEG2RAD(r_fovx), DEG2RAD(r_fovy));
 
 	// View matrix
+	/*
 	float rotation_matrix[16];
 	RotationMatrix(vulkan_globals.view_matrix, -M_PI / 2.0f, 1.0f, 0.0f, 0.0f);
 	RotationMatrix(rotation_matrix,  M_PI / 2.0f, 0.0f, 0.0f, 1.0f);
@@ -334,6 +335,10 @@ void R_SetupMatrix (void)
 	MatrixMultiply(vulkan_globals.view_matrix, rotation_matrix);
 	RotationMatrix(rotation_matrix, DEG2RAD(-r_refdef.viewangles[1]), 0.0f, 0.0f, 1.0f);
 	MatrixMultiply(vulkan_globals.view_matrix, rotation_matrix);
+	*/
+
+	//Derive this from the current forward/up/right vectors instead.
+	RotationMatrixFromVectorsTransposed(vulkan_globals.view_matrix, vpn, vright, vup);
 	
 	float translation_matrix[16];
 	TranslationMatrix(translation_matrix, -r_refdef.vieworg[0], -r_refdef.vieworg[1], -r_refdef.vieworg[2]);
@@ -371,9 +376,13 @@ void R_SetupView (void)
 	Fog_SetupFrame (); //johnfitz
 
 // build the transformation matrix for the given view angles
+	//TODO: Include VR pose in position.
 	VectorCopy (r_refdef.vieworg, r_origin);
-	AngleVectors (r_refdef.viewangles, vpn, vright, vup);
 
+	//AngleVectors (r_refdef.viewangles, vpn, vright, vup);
+	//Get current pose from OpenVR.
+	VID_Update_VR_Poses(vpn, vright, vup);
+	
 // current viewleaf
 	r_oldviewleaf = r_viewleaf;
 	r_viewleaf = Mod_PointInLeaf (r_origin, cl.worldmodel);

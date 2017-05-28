@@ -574,6 +574,61 @@ void RotationMatrix(float matrix[16], float angle, float x, float y, float z)
 	matrix[3*4 + 3] = 1.0f;
 }
 
+void RotationMatrixFromVectors(float matrix[16], vec3_t forward, vec3_t right, vec3_t up)
+{
+	// First column
+	matrix[0 * 4 + 0] = right[0];
+	matrix[0 * 4 + 1] = right[1];
+	matrix[0 * 4 + 2] = right[2];
+	matrix[0 * 4 + 3] = 0.0f;
+
+	// Second column
+	matrix[1 * 4 + 0] = up[0];
+	matrix[1 * 4 + 1] = up[1];
+	matrix[1 * 4 + 2] = up[2];
+	matrix[1 * 4 + 3] = 0.0f;
+
+	// Third column
+	matrix[2 * 4 + 0] = forward[0];
+	matrix[2 * 4 + 1] = forward[1];
+	matrix[2 * 4 + 2] = forward[2];
+	matrix[2 * 4 + 3] = 0.0f;
+
+	// Fourth column
+	matrix[3 * 4 + 0] = 0.0f;
+	matrix[3 * 4 + 1] = 0.0f;
+	matrix[3 * 4 + 2] = 0.0f;
+	matrix[3 * 4 + 3] = 1.0f;
+}
+
+void RotationMatrixFromVectorsTransposed(float matrix[16], vec3_t forward, vec3_t right, vec3_t up)
+{
+	// First column
+	matrix[0 * 4 + 0] = right[0];
+	matrix[1 * 4 + 0] = right[1];
+	matrix[2 * 4 + 0] = right[2];
+	matrix[3 * 4 + 0] = 0.0f;
+
+	// Second column
+	// (There seems to be a built-in minus sign here for the Quake transformation matrices.)
+	matrix[0 * 4 + 1] = -up[0];
+	matrix[1 * 4 + 1] = -up[1];
+	matrix[2 * 4 + 1] = -up[2];
+	matrix[3 * 4 + 1] = 0.0f;
+
+	// Third column
+	matrix[0 * 4 + 2] = -forward[0];
+	matrix[1 * 4 + 2] = -forward[1];
+	matrix[2 * 4 + 2] = -forward[2];
+	matrix[3 * 4 + 2] = 0.0f;
+
+	// Fourth column
+	matrix[0 * 4 + 3] = 0.0f;
+	matrix[1 * 4 + 3] = 0.0f;
+	matrix[2 * 4 + 3] = 0.0f;
+	matrix[3 * 4 + 3] = 1.0f;
+}
+
 /*
 =============
 TranslationMatrix

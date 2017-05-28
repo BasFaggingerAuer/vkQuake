@@ -143,6 +143,7 @@ static vr::IVRRenderModels *		vr_render_models;
 static uint32_t						vr_render_target_width;
 static uint32_t						vr_render_target_height;
 const float							vr_near_clip = 0.1f, vr_far_clip = 30.0f;
+static vr::TrackedDevicePose_t		vr_tracked_device_poses[vr::k_unMaxTrackedDeviceCount];
 
 #ifdef _DEBUG
 static PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallbackEXT;
@@ -150,6 +151,61 @@ static PFN_vkDestroyDebugReportCallbackEXT fpDestroyDebugReportCallbackEXT;
 PFN_vkDebugMarkerSetObjectNameEXT fpDebugMarkerSetObjectNameEXT;
 
 VkDebugReportCallbackEXT debug_report_callback;
+
+void VID_Update_VR_Poses(vec3_t forward, vec3_t right, vec3_t up)
+{
+	//Query VR set for poses.
+	vr::VRCompositor()->WaitGetPoses(vr_tracked_device_poses, vr::k_unMaxTrackedDeviceCount, NULL, 0);
+
+	if (vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
+	{
+		//Extract vectors from tracking transformation matrix.
+		//TODO: Include eye matrices.
+		const auto m = vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking.m;
+
+		float orientation_matrix[16];
+
+		orientation_matrix[0 * 4 + 0] = m[0][0];
+		orientation_matrix[0 * 4 + 1] = m[1][0];
+		orientation_matrix[0 * 4 + 2] = m[2][0];
+		orientation_matrix[0 * 4 + 3] = 0.0f;
+
+		orientation_matrix[1 * 4 + 0] = m[0][1];
+		orientation_matrix[1 * 4 + 1] = m[1][1];
+		orientation_matrix[1 * 4 + 2] = m[2][1];
+		orientation_matrix[1 * 4 + 3] = 0.0f;
+
+		orientation_matrix[2 * 4 + 0] = m[0][2];
+		orientation_matrix[2 * 4 + 1] = m[1][2];
+		orientation_matrix[2 * 4 + 2] = m[2][2];
+		orientation_matrix[2 * 4 + 3] = 0.0f;
+
+		//TODO: Include translations.
+		orientation_matrix[3 * 4 + 0] = 0.0f;
+		orientation_matrix[3 * 4 + 1] = 0.0f;
+		orientation_matrix[3 * 4 + 2] = 0.0f;
+		orientation_matrix[3 * 4 + 3] = 1.0f;
+
+		//Perform some rotations to make the OpenVR and Quake coordinate systems agree with each other.
+		float work_matrix[16];
+
+		RotationMatrix(work_matrix, M_PI, 1.0f, 0.0f, 0.0f);
+		MatrixMultiply(orientation_matrix, work_matrix);
+
+		RotationMatrix(work_matrix, M_PI, 0.0f, 0.0f, 1.0f);
+		MatrixMultiply(work_matrix, orientation_matrix);
+		memcpy(orientation_matrix, work_matrix, 16 * sizeof(float));
+
+		RotationMatrix(work_matrix, -M_PI/2, 1.0f, 0.0f, 0.0f);
+		MatrixMultiply(work_matrix, orientation_matrix);
+		memcpy(orientation_matrix, work_matrix, 16 * sizeof(float));
+
+		//Copy to vectors.
+		memcpy(right,	&orientation_matrix[0 * 4 + 0], 3 * sizeof(float));
+		memcpy(up,		&orientation_matrix[1 * 4 + 0], 3 * sizeof(float));
+		memcpy(forward, &orientation_matrix[2 * 4 + 0], 3 * sizeof(float));
+	}
+}
 
 VkBool32 debug_message_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT obj, int64_t src, size_t loc, int32_t code, const char* pLayer,const char* pMsg, void* pUserData)
 {
