@@ -48,6 +48,7 @@ vec3_t	vup;
 vec3_t	vpn;
 vec3_t	vright;
 vec3_t	r_origin;
+float   vprojection_matrix[16];
 
 float r_fovx, r_fovy; //johnfitz -- rendering fov may be different becuase of r_waterwarp
 
@@ -323,20 +324,6 @@ void R_SetupMatrix (void)
 	// Projection matrix
 	GL_FrustumMatrix(vulkan_globals.projection_matrix, DEG2RAD(r_fovx), DEG2RAD(r_fovy));
 
-	// View matrix
-	/*
-	float rotation_matrix[16];
-	RotationMatrix(vulkan_globals.view_matrix, -M_PI / 2.0f, 1.0f, 0.0f, 0.0f);
-	RotationMatrix(rotation_matrix,  M_PI / 2.0f, 0.0f, 0.0f, 1.0f);
-	MatrixMultiply(vulkan_globals.view_matrix, rotation_matrix);
-	RotationMatrix(rotation_matrix, DEG2RAD(-r_refdef.viewangles[2]), 1.0f, 0.0f, 0.0f);
-	MatrixMultiply(vulkan_globals.view_matrix, rotation_matrix);
-	RotationMatrix(rotation_matrix, DEG2RAD(-r_refdef.viewangles[0]), 0.0f, 1.0f, 0.0f);
-	MatrixMultiply(vulkan_globals.view_matrix, rotation_matrix);
-	RotationMatrix(rotation_matrix, DEG2RAD(-r_refdef.viewangles[1]), 0.0f, 0.0f, 1.0f);
-	MatrixMultiply(vulkan_globals.view_matrix, rotation_matrix);
-	*/
-
 	//Derive this from the current forward/up/right vectors instead.
 	RotationMatrixFromVectorsTransposed(vulkan_globals.view_matrix, vpn, vright, vup);
 	
@@ -377,9 +364,11 @@ void R_SetupView (void)
 
 	//Get VR orientation matrix.
 	//TODO: Add eye dependencies.
+	vr::Hmd_Eye eye = vr::Eye_Left;
+
 	float orientation_matrix[16];
 
-	VID_Update_VR_Poses(orientation_matrix);
+	VID_Update_VR_Poses(orientation_matrix, vprojection_matrix, eye);
 
 	//Update rendering variables.
 	VectorCopy(r_refdef.vieworg, r_origin);

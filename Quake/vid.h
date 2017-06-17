@@ -82,7 +82,7 @@ void VID_SyncCvars (void);
 
 void VID_Toggle (void);
 
-void VID_Update_VR_Poses(float *orientation_matrix);
+void VID_Update_VR_Poses(float *orientation_matrix, float *projection_matrix, const vr::Hmd_Eye eye);
 
 void *VID_GetWindow (void);
 qboolean VID_HasMouseOrInputFocus (void);

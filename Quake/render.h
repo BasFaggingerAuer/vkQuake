@@ -133,7 +133,7 @@ extern	int		reinit_surfcache;
 
 extern	refdef_t	r_refdef;
 extern vec3_t	r_origin, vpn, vright, vup;
-
+extern float   vprojection_matrix[16];
 
 void R_Init (void);
 void R_InitTextures (void);

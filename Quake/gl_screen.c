@@ -980,7 +980,6 @@ void SCR_UpdateScreen (void)
 	//FIXME: only call this when needed
 	//SCR_TileClear();
 
-	/*
 	if (scr_drawdialog) //new game confirm
 	{
 		if (con_forcedup)
@@ -1020,7 +1019,6 @@ void SCR_UpdateScreen (void)
 		M_Draw ();
 	}
 
-	*/
 	V_UpdateBlend(); //johnfitz -- V_UpdatePalette cleaned up and renamed
 
 	GL_EndRendering ();

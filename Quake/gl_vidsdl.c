@@ -153,8 +153,62 @@ PFN_vkDebugMarkerSetObjectNameEXT fpDebugMarkerSetObjectNameEXT;
 
 VkDebugReportCallbackEXT debug_report_callback;
 
-void VID_Update_VR_Poses(float *orientation_matrix)
+void ConvertOpenVRMatToQuake(float *out, const vr::HmdMatrix34_t &in)
 {
+	out[0 * 4 + 0] = in.m[0][0];
+	out[0 * 4 + 1] = in.m[1][0];
+	out[0 * 4 + 2] = in.m[2][0];
+	out[0 * 4 + 3] = 0.0f;
+
+	out[1 * 4 + 0] = in.m[0][1];
+	out[1 * 4 + 1] = in.m[1][1];
+	out[1 * 4 + 2] = in.m[2][1];
+	out[1 * 4 + 3] = 0.0f;
+
+	out[2 * 4 + 0] = in.m[0][2];
+	out[2 * 4 + 1] = in.m[1][2];
+	out[2 * 4 + 2] = in.m[2][2];
+	out[2 * 4 + 3] = 0.0f;
+
+	out[3 * 4 + 0] = in.m[0][3];
+	out[3 * 4 + 1] = in.m[1][3];
+	out[3 * 4 + 2] = in.m[2][3];
+	out[3 * 4 + 3] = 1.0f;
+}
+
+void ConvertOpenVRMatToQuake(float *out, const vr::HmdMatrix44_t &in)
+{
+	out[0 * 4 + 0] = in.m[0][0];
+	out[0 * 4 + 1] = in.m[1][0];
+	out[0 * 4 + 2] = in.m[2][0];
+	out[0 * 4 + 3] = in.m[3][0];
+
+	out[1 * 4 + 0] = in.m[0][1];
+	out[1 * 4 + 1] = in.m[1][1];
+	out[1 * 4 + 2] = in.m[2][1];
+	out[1 * 4 + 3] = in.m[3][1];
+
+	out[2 * 4 + 0] = in.m[0][2];
+	out[2 * 4 + 1] = in.m[1][2];
+	out[2 * 4 + 2] = in.m[2][2];
+	out[2 * 4 + 3] = in.m[3][2];
+
+	out[3 * 4 + 0] = in.m[0][3];
+	out[3 * 4 + 1] = in.m[1][3];
+	out[3 * 4 + 2] = in.m[2][3];
+	out[3 * 4 + 3] = in.m[3][3];
+}
+
+void VID_Update_VR_Poses(float *orientation_matrix, float *projection_matrix, const vr::Hmd_Eye eye)
+{
+	//Get eye matrices.
+	float eye_orientation_matrix[16];
+	float eye_projection_matrix[16];
+
+	ConvertOpenVRMatToQuake(eye_orientation_matrix, vr_system->GetEyeToHeadTransform(eye));
+	//TODO: Are these clipping plane distances correct!?
+	ConvertOpenVRMatToQuake(eye_projection_matrix, vr_system->GetProjectionMatrix(eye, 4.0f, 16384.0f));
+
 	//Query VR set for poses.
 	vr::VRCompositor()->WaitGetPoses(vr_tracked_device_poses, vr::k_unMaxTrackedDeviceCount, NULL, 0);
 
@@ -162,6 +216,7 @@ void VID_Update_VR_Poses(float *orientation_matrix)
 	{
 		//Extract vectors from tracking transformation matrix.
 		//TODO: Include eye matrices.
+		/*
 		const auto m = vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking.m;
 
 		orientation_matrix[0 * 4 + 0] = m[0][0];
@@ -183,6 +238,13 @@ void VID_Update_VR_Poses(float *orientation_matrix)
 		orientation_matrix[3 * 4 + 1] = vr_scale_factor*(m[1][3] - vr_actor_height);
 		orientation_matrix[3 * 4 + 2] = vr_scale_factor*m[2][3];
 		orientation_matrix[3 * 4 + 3] = 1.0f;
+		*/
+
+		ConvertOpenVRMatToQuake(orientation_matrix, vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking);
+
+		orientation_matrix[3 * 4 + 0] = vr_scale_factor*orientation_matrix[3 * 4 + 0];
+		orientation_matrix[3 * 4 + 1] = vr_scale_factor*(orientation_matrix[3 * 4 + 1] - vr_actor_height);
+		orientation_matrix[3 * 4 + 2] = vr_scale_factor*orientation_matrix[3 * 4 + 2];
 
 		//Perform some rotations to make the OpenVR and Quake coordinate systems agree with each other.
 		float work_matrix[16];
@@ -197,13 +259,6 @@ void VID_Update_VR_Poses(float *orientation_matrix)
 		RotationMatrix(work_matrix, -M_PI/2, 1.0f, 0.0f, 0.0f);
 		MatrixMultiply(work_matrix, orientation_matrix);
 		memcpy(orientation_matrix, work_matrix, 16 * sizeof(float));
-
-		//Copy to vectors.
-		/*
-		memcpy(right,	&orientation_matrix[0 * 4 + 0], 3 * sizeof(float));
-		memcpy(up,		&orientation_matrix[1 * 4 + 0], 3 * sizeof(float));
-		memcpy(forward, &orientation_matrix[2 * 4 + 0], 3 * sizeof(float));
-		*/
 	}
 }
 
