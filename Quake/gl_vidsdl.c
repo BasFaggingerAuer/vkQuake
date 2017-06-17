@@ -203,11 +203,14 @@ void VID_Update_VR_Poses(float *orientation_matrix, float *projection_matrix, co
 {
 	//Get eye matrices.
 	float eye_orientation_matrix[16];
-	float eye_projection_matrix[16];
-
+	
 	ConvertOpenVRMatToQuake(eye_orientation_matrix, vr_system->GetEyeToHeadTransform(eye));
+	
 	//TODO: Are these clipping plane distances correct!?
-	ConvertOpenVRMatToQuake(eye_projection_matrix, vr_system->GetProjectionMatrix(eye, 4.0f, 16384.0f));
+	ConvertOpenVRMatToQuake(projection_matrix, vr_system->GetProjectionMatrix(eye, 4.0f, 16384.0f));
+
+	//Apparently there is a y-axis flip between OpenVR and Vulkan: https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/.
+	projection_matrix[1 * 4 + 1] = -projection_matrix[1 * 4 + 1];
 
 	//Query VR set for poses.
 	vr::VRCompositor()->WaitGetPoses(vr_tracked_device_poses, vr::k_unMaxTrackedDeviceCount, NULL, 0);
@@ -215,33 +218,11 @@ void VID_Update_VR_Poses(float *orientation_matrix, float *projection_matrix, co
 	if (vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
 	{
 		//Extract vectors from tracking transformation matrix.
-		//TODO: Include eye matrices.
-		/*
-		const auto m = vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking.m;
-
-		orientation_matrix[0 * 4 + 0] = m[0][0];
-		orientation_matrix[0 * 4 + 1] = m[1][0];
-		orientation_matrix[0 * 4 + 2] = m[2][0];
-		orientation_matrix[0 * 4 + 3] = 0.0f;
-
-		orientation_matrix[1 * 4 + 0] = m[0][1];
-		orientation_matrix[1 * 4 + 1] = m[1][1];
-		orientation_matrix[1 * 4 + 2] = m[2][1];
-		orientation_matrix[1 * 4 + 3] = 0.0f;
-
-		orientation_matrix[2 * 4 + 0] = m[0][2];
-		orientation_matrix[2 * 4 + 1] = m[1][2];
-		orientation_matrix[2 * 4 + 2] = m[2][2];
-		orientation_matrix[2 * 4 + 3] = 0.0f;
-
-		orientation_matrix[3 * 4 + 0] = vr_scale_factor*m[0][3];
-		orientation_matrix[3 * 4 + 1] = vr_scale_factor*(m[1][3] - vr_actor_height);
-		orientation_matrix[3 * 4 + 2] = vr_scale_factor*m[2][3];
-		orientation_matrix[3 * 4 + 3] = 1.0f;
-		*/
-
 		ConvertOpenVRMatToQuake(orientation_matrix, vr_tracked_device_poses[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking);
 
+		MatrixMultiply(orientation_matrix, eye_orientation_matrix);
+
+		//Scale such that the real world is comparable in size to Quake's.
 		orientation_matrix[3 * 4 + 0] = vr_scale_factor*orientation_matrix[3 * 4 + 0];
 		orientation_matrix[3 * 4 + 1] = vr_scale_factor*(orientation_matrix[3 * 4 + 1] - vr_actor_height);
 		orientation_matrix[3 * 4 + 2] = vr_scale_factor*orientation_matrix[3 * 4 + 2];

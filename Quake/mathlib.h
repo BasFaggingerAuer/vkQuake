@@ -103,6 +103,7 @@ float	anglemod(float a);
 
 void MatrixMultiply(float left[16], float right[16]);
 void RotationMatrix(float matrix[16], float angle, float x, float y, float z);
+void InvertModelViewMatrix(float matrix[16]);
 void RotationMatrixFromVectors(float matrix[16], vec3_t forward, vec3_t right, vec3_t up);
 void RotationMatrixFromVectorsTransposed(float matrix[16], vec3_t forward, vec3_t right, vec3_t up);
 void TranslationMatrix(float matrix[16], float x, float y, float z);

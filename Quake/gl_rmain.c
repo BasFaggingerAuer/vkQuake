@@ -49,6 +49,7 @@ vec3_t	vpn;
 vec3_t	vright;
 vec3_t	r_origin;
 float   vprojection_matrix[16];
+vr::Hmd_Eye vr_current_eye = vr::Eye_Left;
 
 float r_fovx, r_fovy; //johnfitz -- rendering fov may be different becuase of r_waterwarp
 
@@ -257,6 +258,27 @@ void TurnVector (vec3_t out, const vec3_t forward, const vec3_t side, float angl
 	out[2] = scale_forward*forward[2] + scale_side*side[2];
 }
 
+//Extract frustum planes directly from the projection matrix.
+void R_SetFrustumFromProjectionMatrix(const float *matrix)
+{
+	//Extract normals.
+	for (int i = 0; i < 3; i++)
+	{
+		frustum[0].normal[i] = matrix[i * 4 + 0] - matrix[i * 4 + 3];
+		frustum[1].normal[i] = matrix[i * 4 + 0] + matrix[i * 4 + 3];
+		frustum[2].normal[i] = matrix[i * 4 + 1] - matrix[i * 4 + 3];
+		frustum[3].normal[i] = matrix[i * 4 + 1] + matrix[i * 4 + 3];
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		VectorNormalize(frustum[i].normal);
+		frustum[i].type = PLANE_ANYZ;
+		frustum[i].dist = DotProduct(r_origin, frustum[i].normal);
+		frustum[i].signbits = SignbitsForPlane(&frustum[i]);
+	}
+}
+
 /*
 ===============
 R_SetFrustum -- johnfitz -- rewritten
@@ -274,7 +296,7 @@ void R_SetFrustum (float fovx, float fovy)
 	for (i=0 ; i<4 ; i++)
 	{
 		frustum[i].type = PLANE_ANYZ;
-		frustum[i].dist = DotProduct (r_origin, frustum[i].normal); //FIXME: shouldn't this always be zero?
+		frustum[i].dist = DotProduct (r_origin, frustum[i].normal); //FIXME: shouldn't this always be zero? (No.)
 		frustum[i].signbits = SignbitsForPlane (&frustum[i]);
 	}
 }
@@ -322,7 +344,7 @@ void R_SetupMatrix (void)
 				r_refdef.vrect.height);
 
 	// Projection matrix
-	GL_FrustumMatrix(vulkan_globals.projection_matrix, DEG2RAD(r_fovx), DEG2RAD(r_fovy));
+	memcpy(vulkan_globals.projection_matrix, vprojection_matrix, 16 * sizeof(float));
 
 	//Derive this from the current forward/up/right vectors instead.
 	RotationMatrixFromVectorsTransposed(vulkan_globals.view_matrix, vpn, vright, vup);
@@ -363,12 +385,9 @@ void R_SetupView (void)
 	Fog_SetupFrame (); //johnfitz
 
 	//Get VR orientation matrix.
-	//TODO: Add eye dependencies.
-	vr::Hmd_Eye eye = vr::Eye_Left;
-
 	float orientation_matrix[16];
 
-	VID_Update_VR_Poses(orientation_matrix, vprojection_matrix, eye);
+	VID_Update_VR_Poses(orientation_matrix, vprojection_matrix, vr_current_eye);
 
 	//Update rendering variables.
 	VectorCopy(r_refdef.vieworg, r_origin);
@@ -377,6 +396,13 @@ void R_SetupView (void)
 	VectorCopy(&orientation_matrix[0 * 4 + 0], vright);
 	VectorCopy(&orientation_matrix[1 * 4 + 0], vup);
 	VectorCopy(&orientation_matrix[2 * 4 + 0], vpn);
+
+	//Create view-projection matrix.
+	float projection_inv_orientation_matrix[16];
+
+	memcpy(projection_inv_orientation_matrix, vprojection_matrix, 16 * sizeof(float));
+	InvertModelViewMatrix(orientation_matrix);
+	MatrixMultiply(projection_inv_orientation_matrix, orientation_matrix);
 	
 // current viewleaf
 	r_oldviewleaf = r_viewleaf;
@@ -410,6 +436,8 @@ void R_SetupView (void)
 	//johnfitz
 
 	R_SetFrustum (r_fovx, r_fovy); //johnfitz -- use r_fov* vars
+	//TODO: Fix this function.
+	//R_SetFrustumFromProjectionMatrix(projection_inv_orientation_matrix);
 
 	R_MarkSurfaces (); //johnfitz -- create texture chains from PVS
 

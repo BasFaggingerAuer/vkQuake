@@ -601,6 +601,25 @@ void RotationMatrixFromVectors(float matrix[16], vec3_t forward, vec3_t right, v
 	matrix[3 * 4 + 3] = 1.0f;
 }
 
+void InvertModelViewMatrix(float matrix[16])
+{
+	float m[16];
+
+	memcpy(m, matrix, 16 * sizeof(float));
+
+	//Transpose rotation part.
+	for (int i = 0; i < 3; ++i)
+	{
+		for (int j = 0; j < 3; ++j)
+		{
+			matrix[i * 4 + j] = m[j * 4 + i];
+		}
+	}
+
+	TranslationMatrix(m, -matrix[3 * 4 + 0], -matrix[3 * 4 + 1], -matrix[3 * 4 + 2]);
+	MatrixMultiply(matrix, m);
+}
+
 void RotationMatrixFromVectorsTransposed(float matrix[16], vec3_t forward, vec3_t right, vec3_t up)
 {
 	// First column
