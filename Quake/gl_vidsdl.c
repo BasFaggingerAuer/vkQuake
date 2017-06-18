@@ -145,6 +145,7 @@ static uint32_t						vr_render_target_height;
 const float							vr_near_clip = 0.1f, vr_far_clip = 30.0f;
 static vr::TrackedDevicePose_t		vr_tracked_device_poses[vr::k_unMaxTrackedDeviceCount];
 const float							vr_scale_factor = 32.0f, vr_actor_height = 1.8f;
+vr::Hmd_Eye							vr_current_eye = vr::Eye_Left;
 
 #ifdef _DEBUG
 static PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallbackEXT;
@@ -2008,6 +2009,30 @@ void GL_EndRendering (void)
 	err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
 	if (err != VK_SUCCESS)
 		Sys_Error("vkQueuePresentKHR failed");
+
+	//Submit image to VR.
+	vr::VRTextureBounds_t textureBounds;
+    textureBounds.uMin = 0.0f;
+    textureBounds.uMax = 1.0f;
+    textureBounds.vMin = 0.0f;
+    textureBounds.vMax = 1.0f;
+
+    vr::VRVulkanTextureData_t vulkanData;
+    vulkanData.m_nImage = (uint64_t)vulkan_globals.color_buffers[0];
+    vulkanData.m_pDevice = vulkan_globals.device;
+    vulkanData.m_pPhysicalDevice = vulkan_physical_device;
+    vulkanData.m_pInstance = vulkan_instance;
+    vulkanData.m_pQueue = vulkan_globals.queue;
+    vulkanData.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
+
+    vulkanData.m_nWidth = vid.width;
+    vulkanData.m_nHeight = vid.width;
+    vulkanData.m_nFormat = vulkan_globals.color_format;
+    vulkanData.m_nSampleCount = vulkan_globals.sample_count;
+
+    vr::Texture_t texture = { &vulkanData, vr::TextureType_Vulkan, vr::ColorSpace_Auto };
+
+    vr::VRCompositor()->Submit(vr_current_eye, &texture, &textureBounds);
 }
 
 /*

@@ -741,8 +741,8 @@ void _Host_Frame (float time)
 	//Draw for both eyes.
 	vr_current_eye = vr::Eye_Left;
 	SCR_UpdateScreen ();
-	//vr_current_eye = vr::Eye_Right;
-	//SCR_UpdateScreen();
+	vr_current_eye = vr::Eye_Right;
+	SCR_UpdateScreen();
 
 	CL_RunParticles (); //johnfitz -- seperated from rendering
 

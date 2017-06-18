@@ -49,7 +49,7 @@ vec3_t	vpn;
 vec3_t	vright;
 vec3_t	r_origin;
 float   vprojection_matrix[16];
-vr::Hmd_Eye vr_current_eye = vr::Eye_Left;
+extern vr::Hmd_Eye vr_current_eye;
 
 float r_fovx, r_fovy; //johnfitz -- rendering fov may be different becuase of r_waterwarp
 
