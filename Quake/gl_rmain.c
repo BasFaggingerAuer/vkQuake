@@ -262,12 +262,13 @@ void TurnVector (vec3_t out, const vec3_t forward, const vec3_t side, float angl
 void R_SetFrustumFromProjectionMatrix(const float *matrix)
 {
 	//Extract normals.
+	//TODO: The sign conventions are somewhat mysterious, would be good to figure them out.
 	for (int i = 0; i < 3; i++)
 	{
-		frustum[0].normal[i] = matrix[i * 4 + 0] - matrix[i * 4 + 3];
-		frustum[1].normal[i] = matrix[i * 4 + 0] + matrix[i * 4 + 3];
-		frustum[2].normal[i] = matrix[i * 4 + 1] - matrix[i * 4 + 3];
-		frustum[3].normal[i] = matrix[i * 4 + 1] + matrix[i * 4 + 3];
+		frustum[0].normal[i] = -(matrix[i * 4 + 0] + matrix[i * 4 + 3]);
+		frustum[1].normal[i] =  (matrix[i * 4 + 0] - matrix[i * 4 + 3]);
+		frustum[2].normal[i] = -(matrix[i * 4 + 1] + matrix[i * 4 + 3]);
+		frustum[3].normal[i] =  (matrix[i * 4 + 1] - matrix[i * 4 + 3]);
 	}
 
 	for (int i = 0; i < 4; i++)
@@ -277,6 +278,15 @@ void R_SetFrustumFromProjectionMatrix(const float *matrix)
 		frustum[i].dist = DotProduct(r_origin, frustum[i].normal);
 		frustum[i].signbits = SignbitsForPlane(&frustum[i]);
 	}
+
+	/*
+	Con_Printf("R_SetFrustumFromProjectionMatrix\n");
+
+	for (int i = 0; i < 4; ++i)
+	{
+		Con_Printf("    (%.3f, %.3f, %.3f)\n", frustum[i].normal[0], frustum[i].normal[1], frustum[i].normal[2]);
+	}
+	*/
 }
 
 /*
@@ -299,6 +309,15 @@ void R_SetFrustum (float fovx, float fovy)
 		frustum[i].dist = DotProduct (r_origin, frustum[i].normal); //FIXME: shouldn't this always be zero? (No.)
 		frustum[i].signbits = SignbitsForPlane (&frustum[i]);
 	}
+
+	/*
+	Con_Printf("R_SetFrustum(%f, %f)\n", fovx, fovy);
+
+	for (i = 0; i < 4; ++i)
+	{
+		Con_Printf("    (%.3f, %.3f, %.3f)\n", frustum[i].normal[0], frustum[i].normal[1], frustum[i].normal[2]);
+	}
+	*/
 }
 
 /*
@@ -384,6 +403,28 @@ void R_SetupView (void)
 {
 	Fog_SetupFrame (); //johnfitz
 
+	//johnfitz -- calculate r_fovx and r_fovy here
+	r_fovx = r_refdef.fov_x;
+	r_fovy = r_refdef.fov_y;
+	render_warp = false;
+
+	if (r_waterwarp.value)
+	{
+		int contents = Mod_PointInLeaf(r_origin, cl.worldmodel)->contents;
+		if (contents == CONTENTS_WATER || contents == CONTENTS_SLIME || contents == CONTENTS_LAVA)
+		{
+			if (r_waterwarp.value == 1)
+				render_warp = true;
+			else
+			{
+				//variance is a percentage of width, where width = 2 * tan(fov / 2) otherwise the effect is too dramatic at high FOV and too subtle at low FOV.  what a mess!
+				r_fovx = atan(tan(DEG2RAD(r_refdef.fov_x) / 2) * (0.97 + sin(cl.time * 1.5) * 0.03)) * 2 / M_PI_DIV_180;
+				r_fovy = atan(tan(DEG2RAD(r_refdef.fov_y) / 2) * (1.03 - sin(cl.time * 1.5) * 0.03)) * 2 / M_PI_DIV_180;
+			}
+		}
+	}
+	//johnfitz
+
 	//Get VR orientation matrix.
 	float orientation_matrix[16];
 
@@ -413,31 +454,7 @@ void R_SetupView (void)
 
 	r_cache_thrash = false;
 
-	//johnfitz -- calculate r_fovx and r_fovy here
-	r_fovx = r_refdef.fov_x;
-	r_fovy = r_refdef.fov_y;
-	render_warp = false;
-
-	if (r_waterwarp.value)
-	{
-		int contents = Mod_PointInLeaf (r_origin, cl.worldmodel)->contents;
-		if (contents == CONTENTS_WATER || contents == CONTENTS_SLIME || contents == CONTENTS_LAVA)
-		{
-			if (r_waterwarp.value == 1)
-				render_warp = true;
-			else
-			{
-				//variance is a percentage of width, where width = 2 * tan(fov / 2) otherwise the effect is too dramatic at high FOV and too subtle at low FOV.  what a mess!
-				r_fovx = atan(tan(DEG2RAD(r_refdef.fov_x) / 2) * (0.97 + sin(cl.time * 1.5) * 0.03)) * 2 / M_PI_DIV_180;
-				r_fovy = atan(tan(DEG2RAD(r_refdef.fov_y) / 2) * (1.03 - sin(cl.time * 1.5) * 0.03)) * 2 / M_PI_DIV_180;
-			}
-		}
-	}
-	//johnfitz
-
-	R_SetFrustum (r_fovx, r_fovy); //johnfitz -- use r_fov* vars
-	//TODO: Fix this function.
-	//R_SetFrustumFromProjectionMatrix(projection_inv_orientation_matrix);
+	R_SetFrustumFromProjectionMatrix(projection_inv_orientation_matrix);
 
 	R_MarkSurfaces (); //johnfitz -- create texture chains from PVS
 
