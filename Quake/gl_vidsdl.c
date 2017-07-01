@@ -147,6 +147,23 @@ static vr::TrackedDevicePose_t		vr_tracked_device_poses[vr::k_unMaxTrackedDevice
 const float							vr_scale_factor = 32.0f, vr_actor_height = 1.8f;
 vr::Hmd_Eye							vr_current_eye = vr::Eye_Left;
 
+//From cube_openvr.cpp by danginsburg.
+struct vk_texture_object {
+    VkSampler sampler;
+
+    VkImage image;
+    VkImageLayout imageLayout;
+
+	VkMemoryAllocateInfo mem_alloc;
+	VkDeviceMemory mem;
+	VkImageView view;
+    
+    int32_t tex_width;
+    int32_t tex_height;
+};
+
+vk_texture_object					vr_eye_texture;
+
 #ifdef _DEBUG
 static PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallbackEXT;
 static PFN_vkDestroyDebugReportCallbackEXT fpDestroyDebugReportCallbackEXT;
@@ -1778,6 +1795,95 @@ static void GL_CreateFrameBuffers( void )
 
 		GL_SetObjectName((uint64_t)ui_framebuffers[i], VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT, "ui");
 	}
+
+	//Create VR eye texture.
+	memset(&vr_eye_texture, 0, sizeof(vr_eye_texture));
+	vr_eye_texture.tex_width = vr_render_target_width;
+    vr_eye_texture.tex_height = vr_render_target_height;
+	vr_eye_texture.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	VkImageCreateInfo image_create_info;
+	memset(&image_create_info, 0, sizeof(image_create_info));
+	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_create_info.pNext = nullptr;
+	image_create_info.flags = 0;
+	image_create_info.imageType = VK_IMAGE_TYPE_2D;
+	image_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+	image_create_info.extent.width = vr_render_target_width;
+	image_create_info.extent.height = vr_render_target_height;
+	image_create_info.extent.depth = 1;
+	image_create_info.mipLevels = 1;
+	image_create_info.arrayLayers = 1;
+	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	image_create_info.queueFamilyIndexCount = 0;
+	image_create_info.pQueueFamilyIndices = nullptr;
+	image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	
+    err = vkCreateImage(vulkan_globals.device, &image_create_info, nullptr, &vr_eye_texture.image);
+	if (err != VK_SUCCESS)
+		Sys_Error("Unable to create VR eye texture image!");
+    
+	VkMemoryRequirements memory_requirements;
+	vkGetImageMemoryRequirements(vulkan_globals.device, vr_eye_texture.image, &memory_requirements);
+	
+	vr_eye_texture.mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	vr_eye_texture.mem_alloc.pNext = nullptr;
+	vr_eye_texture.mem_alloc.allocationSize = memory_requirements.size;
+	vr_eye_texture.mem_alloc.memoryTypeIndex = vulkan_globals.memory_properties.memoryTypeCount + 1;
+
+	//Determine proper memory type.
+	for (auto i = 0; i < vulkan_globals.memory_properties.memoryTypeCount; ++i)
+	{
+		if ((memory_requirements.memoryTypeBits & (1 << i)) == (1 << i))
+		{
+			if ((vulkan_globals.memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+			{
+				vr_eye_texture.mem_alloc.memoryTypeIndex = i;
+				break;
+			}
+		}
+	}
+
+	if (vr_eye_texture.mem_alloc.memoryTypeIndex >= vulkan_globals.memory_properties.memoryTypeCount)
+		Sys_Error("Unable to find memory type for eye texture allocation!");
+
+	err = vkAllocateMemory(vulkan_globals.device, &vr_eye_texture.mem_alloc, nullptr, &vr_eye_texture.mem);
+	if (err != VK_SUCCESS)
+		Sys_Error("Unable to allocate VR eye texture image!");
+
+	err = vkBindImageMemory(vulkan_globals.device, vr_eye_texture.image, vr_eye_texture.mem, 0);
+	if (err != VK_SUCCESS)
+		Sys_Error("Unable to bind VR eye texture image!");
+
+	vr_eye_texture.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+	/*
+	TODO: Add this to the command buffer at the appropriate location.
+    set_image_layout( cmd, vr_eye_texture.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
+                        vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eTransferWrite,
+                        vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eAllGraphics );
+	*/
+
+	VkImageViewCreateInfo image_view_create_info;
+	memset(&image_view_create_info, 0, sizeof(image_view_create_info));
+	image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	image_view_create_info.pNext = nullptr;
+	image_view_create_info.flags = 0;
+	image_view_create_info.image = vr_eye_texture.image;
+	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	image_view_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+	image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_view_create_info.subresourceRange.baseMipLevel = 0;
+	image_view_create_info.subresourceRange.levelCount = 1;
+	image_view_create_info.subresourceRange.baseArrayLayer = 0;
+	image_view_create_info.subresourceRange.layerCount = 1;
+
+	err = vkCreateImageView(vulkan_globals.device, &image_view_create_info, nullptr, &vr_eye_texture.view);
+	if (err != VK_SUCCESS)
+		Sys_Error("Unable to create VR eye texture image view!");
 }
 
 /*
@@ -2010,6 +2116,8 @@ void GL_EndRendering (void)
 	if (err != VK_SUCCESS)
 		Sys_Error("vkQueuePresentKHR failed");
 
+	//TODO: Copy color buffer to VR texture.
+
 	//Submit image to VR.
 	vr::VRTextureBounds_t textureBounds;
     textureBounds.uMin = 0.0f;
@@ -2018,17 +2126,17 @@ void GL_EndRendering (void)
     textureBounds.vMax = 1.0f;
 
     vr::VRVulkanTextureData_t vulkanData;
-    vulkanData.m_nImage = (uint64_t)vulkan_globals.color_buffers[0];
+    vulkanData.m_nImage = (uint64_t)vr_eye_texture.image;
     vulkanData.m_pDevice = vulkan_globals.device;
     vulkanData.m_pPhysicalDevice = vulkan_physical_device;
     vulkanData.m_pInstance = vulkan_instance;
     vulkanData.m_pQueue = vulkan_globals.queue;
     vulkanData.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
 
-    vulkanData.m_nWidth = vid.width;
-    vulkanData.m_nHeight = vid.width;
-    vulkanData.m_nFormat = vulkan_globals.color_format;
-    vulkanData.m_nSampleCount = vulkan_globals.sample_count;
+    vulkanData.m_nWidth = vr_eye_texture.tex_width;
+    vulkanData.m_nHeight = vr_eye_texture.tex_height;
+    vulkanData.m_nFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    vulkanData.m_nSampleCount = 1;
 
     vr::Texture_t texture = { &vulkanData, vr::TextureType_Vulkan, vr::ColorSpace_Auto };
 
