@@ -1835,7 +1835,7 @@ static void GL_CreateFrameBuffers( void )
 	vr_eye_texture.mem_alloc.memoryTypeIndex = vulkan_globals.memory_properties.memoryTypeCount + 1;
 
 	//Determine proper memory type.
-	for (auto i = 0; i < vulkan_globals.memory_properties.memoryTypeCount; ++i)
+	for (uint32_t i = 0; i < vulkan_globals.memory_properties.memoryTypeCount; ++i)
 	{
 		if ((memory_requirements.memoryTypeBits & (1 << i)) == (1 << i))
 		{
@@ -1860,12 +1860,67 @@ static void GL_CreateFrameBuffers( void )
 
 	vr_eye_texture.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-	/*
-	TODO: Add this to the command buffer at the appropriate location.
-    set_image_layout( cmd, vr_eye_texture.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
-                        vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eTransferWrite,
-                        vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eAllGraphics );
-	*/
+	VkImageSubresourceRange image_subresource_range;
+	memset(&image_subresource_range, 0, sizeof(image_subresource_range));
+	image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_subresource_range.baseMipLevel = 0;
+	image_subresource_range.levelCount = 1;
+	image_subresource_range.baseArrayLayer = 0;
+	image_subresource_range.layerCount = 1;
+
+	VkImageMemoryBarrier image_memory_barrier;
+	memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.pNext = nullptr;
+	image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	image_memory_barrier.srcQueueFamilyIndex = 0;
+	image_memory_barrier.dstQueueFamilyIndex = 0;
+	image_memory_barrier.image = vr_eye_texture.image;
+	image_memory_barrier.subresourceRange = image_subresource_range;
+
+	//Allocate temporary command buffer to change image layout.
+	VkCommandBuffer command_buffer;
+
+	VkCommandBufferAllocateInfo command_buffer_allocate_info;
+	memset(&command_buffer_allocate_info, 0, sizeof(command_buffer_allocate_info));
+	command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	command_buffer_allocate_info.commandPool = transient_command_pool;
+	command_buffer_allocate_info.commandBufferCount = 1;
+	err = vkAllocateCommandBuffers(vulkan_globals.device, &command_buffer_allocate_info, &command_buffer);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkAllocateCommandBuffers failed");
+
+	VkCommandBufferBeginInfo command_buffer_begin_info;
+	memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
+	command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	err = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkBeginCommandBuffer failed");
+
+	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
+
+	err = vkEndCommandBuffer(command_buffer);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkEndCommandBuffer failed");
+
+	VkSubmitInfo submit_info;
+	memset(&submit_info, 0, sizeof(submit_info));
+	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount = 1;
+	submit_info.pCommandBuffers = &command_buffer;
+
+	err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, VK_NULL_HANDLE);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkQueueSubmit failed");
+
+	err = vkDeviceWaitIdle(vulkan_globals.device);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkDeviceWaitIdle failed");
+
+	vkFreeCommandBuffers(vulkan_globals.device, transient_command_pool, 1, &command_buffer);
 
 	VkImageViewCreateInfo image_view_create_info;
 	memset(&image_view_create_info, 0, sizeof(image_view_create_info));
@@ -1875,15 +1930,13 @@ static void GL_CreateFrameBuffers( void )
 	image_view_create_info.image = vr_eye_texture.image;
 	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	image_view_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-	image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	image_view_create_info.subresourceRange.baseMipLevel = 0;
-	image_view_create_info.subresourceRange.levelCount = 1;
-	image_view_create_info.subresourceRange.baseArrayLayer = 0;
-	image_view_create_info.subresourceRange.layerCount = 1;
-
+	image_view_create_info.subresourceRange = image_subresource_range;
+	
 	err = vkCreateImageView(vulkan_globals.device, &image_view_create_info, nullptr, &vr_eye_texture.view);
 	if (err != VK_SUCCESS)
 		Sys_Error("Unable to create VR eye texture image view!");
+
+	Con_Printf("Created %dx%d OpenVR eye texture\n", vr_eye_texture.tex_width, vr_eye_texture.tex_height);
 }
 
 /*
@@ -2082,6 +2135,20 @@ void GL_EndRendering (void)
 
 	vkCmdEndRenderPass(vulkan_globals.command_buffer);
 
+	//Transfer drawn image to the OpenVR texture.
+
+	// Transition from COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL  for the OpenVR Submit
+	//TODO.
+	/*
+	set_image_layout( cmd, m_eyeRenderTarget.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
+                         vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eTransferWrite,
+                         vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eAllGraphics );
+
+        set_image_layout( commandBuffer,m_eyeRenderTarget.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eColorAttachmentOptimal,
+                         vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eColorAttachmentWrite,
+                         vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eTransfer );
+	*/
+
 	err = vkEndCommandBuffer(vulkan_globals.command_buffer);
 	if (err != VK_SUCCESS)
 		Sys_Error("vkEndCommandBuffer failed");
@@ -2105,16 +2172,6 @@ void GL_EndRendering (void)
 
 	command_buffer_submitted[current_command_buffer] = true;
 	current_command_buffer = (current_command_buffer + 1) % NUM_COMMAND_BUFFERS;
-
-	VkPresentInfoKHR present_info;
-	memset(&present_info, 0, sizeof(present_info));
-	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	present_info.swapchainCount = 1;
-	present_info.pSwapchains = &vulkan_swapchain,
-	present_info.pImageIndices = &current_swapchain_buffer;
-	err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkQueuePresentKHR failed");
 
 	//TODO: Copy color buffer to VR texture.
 
@@ -2141,6 +2198,17 @@ void GL_EndRendering (void)
     vr::Texture_t texture = { &vulkanData, vr::TextureType_Vulkan, vr::ColorSpace_Auto };
 
     vr::VRCompositor()->Submit(vr_current_eye, &texture, &textureBounds);
+
+	//Present Vulkan output.
+	VkPresentInfoKHR present_info;
+	memset(&present_info, 0, sizeof(present_info));
+	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	present_info.swapchainCount = 1;
+	present_info.pSwapchains = &vulkan_swapchain,
+	present_info.pImageIndices = &current_swapchain_buffer;
+	err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkQueuePresentKHR failed");
 }
 
 /*
