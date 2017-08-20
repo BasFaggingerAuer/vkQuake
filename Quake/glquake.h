@@ -29,6 +29,8 @@ void GL_WaitForDeviceIdle (void);
 void GL_BeginRendering (int *x, int *y, int *width, int *height);
 void GL_AcquireNextSwapChainImage (void);
 void GL_EndRendering (void);
+void GL_OpenVR_Set_Eye(const vr::Hmd_Eye set_eye);
+void GL_UpdateVR(void);
 void GL_Set2D (void);
 
 extern	int glx, gly, glwidth, glheight;

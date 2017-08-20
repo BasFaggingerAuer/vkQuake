@@ -1024,3 +1024,13 @@ void SCR_UpdateScreen (void)
 	GL_EndRendering ();
 }
 
+void SCR_UpdateScreen_OpenVR(void)
+{
+    //Draw for both eyes.
+    GL_OpenVR_Set_Eye(vr::Eye_Left);
+	SCR_UpdateScreen();
+	GL_OpenVR_Set_Eye(vr::Eye_Right);
+	SCR_UpdateScreen();
+
+    GL_UpdateVR();
+}

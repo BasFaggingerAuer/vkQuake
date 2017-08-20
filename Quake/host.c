@@ -86,8 +86,6 @@ cvar_t devstats = {"devstats","0",CVAR_NONE}; //johnfitz -- track developer stat
 devstats_t dev_stats, dev_peakstats;
 overflowtimes_t dev_overflows; //this stores the last time overflow messages were displayed, not the last time overflows occured
 
-extern vr::Hmd_Eye vr_current_eye;
-
 /*
 ================
 Max_Edicts_f -- johnfitz
@@ -738,12 +736,8 @@ void _Host_Frame (float time)
 	if (host_speeds.value)
 		time1 = Sys_DoubleTime ();
 
-	//Draw for both eyes.
-	vr_current_eye = vr::Eye_Left;
-	SCR_UpdateScreen ();
-	vr_current_eye = vr::Eye_Right;
-	SCR_UpdateScreen();
-
+    SCR_UpdateScreen_OpenVR();
+	
 	CL_RunParticles (); //johnfitz -- seperated from rendering
 
 	if (host_speeds.value)

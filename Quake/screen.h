@@ -29,7 +29,7 @@ void SCR_Init (void);
 void SCR_LoadPics (void);
 
 void SCR_UpdateScreen (void);
-
+void SCR_UpdateScreen_OpenVR(void);
 
 void SCR_SizeUp (void);
 void SCR_SizeDown (void);

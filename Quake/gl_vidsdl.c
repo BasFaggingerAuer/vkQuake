@@ -2135,7 +2135,7 @@ void GL_EndRendering (void)
 
 	vkCmdEndRenderPass(vulkan_globals.command_buffer);
 
-	//Transfer drawn image to the OpenVR texture.
+    //Transfer drawn image to the OpenVR texture.
 
 	// Transition from COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL  for the OpenVR Submit
 	//TODO.
@@ -2173,7 +2173,27 @@ void GL_EndRendering (void)
 	command_buffer_submitted[current_command_buffer] = true;
 	current_command_buffer = (current_command_buffer + 1) % NUM_COMMAND_BUFFERS;
 
-	//TODO: Copy color buffer to VR texture.
+	//Present Vulkan output.
+	VkPresentInfoKHR present_info;
+	memset(&present_info, 0, sizeof(present_info));
+	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	present_info.swapchainCount = 1;
+	present_info.pSwapchains = &vulkan_swapchain,
+	present_info.pImageIndices = &current_swapchain_buffer;
+	err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkQueuePresentKHR failed");
+}
+
+void GL_OpenVR_Set_Eye(const vr::Hmd_Eye set_eye)
+{
+    vr_current_eye = set_eye;
+}
+
+void GL_UpdateVR(void)
+{
+    //Submit eye textures to OpenVR.
+    vkDeviceWaitIdle(vulkan_globals.device);
 
 	//Submit image to VR.
 	vr::VRTextureBounds_t textureBounds;
@@ -2197,18 +2217,17 @@ void GL_EndRendering (void)
 
     vr::Texture_t texture = { &vulkanData, vr::TextureType_Vulkan, vr::ColorSpace_Auto };
 
-    vr::VRCompositor()->Submit(vr_current_eye, &texture, &textureBounds);
+    vr::VRCompositor()->Submit(vr::Eye_Left, &texture, &textureBounds);
+    vr::VRCompositor()->Submit(vr::Eye_Right, &texture, &textureBounds);
+    
+    /*
+    vr::EVRCompositorError error = vr::VRCompositor()->Submit(vr_current_eye, &texture, &textureBounds);
 
-	//Present Vulkan output.
-	VkPresentInfoKHR present_info;
-	memset(&present_info, 0, sizeof(present_info));
-	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	present_info.swapchainCount = 1;
-	present_info.pSwapchains = &vulkan_swapchain,
-	present_info.pImageIndices = &current_swapchain_buffer;
-	err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkQueuePresentKHR failed");
+    if (error != vr::VRCompositorError_None)
+    {
+        Con_Printf("VR compositor submission error %d!\n", error);
+    }
+    */
 }
 
 /*
