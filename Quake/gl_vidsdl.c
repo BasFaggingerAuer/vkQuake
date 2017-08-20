@@ -162,7 +162,7 @@ struct vk_texture_object {
     int32_t tex_height;
 };
 
-vk_texture_object					vr_eye_texture;
+vk_texture_object					vr_eye_texture[2];
 
 #ifdef _DEBUG
 static PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallbackEXT;
@@ -1738,7 +1738,6 @@ static void GL_CreateSwapChain( void )
 	}
 }
 
-
 /*
 ===============
 GL_CreateFrameBuffers
@@ -1796,147 +1795,151 @@ static void GL_CreateFrameBuffers( void )
 		GL_SetObjectName((uint64_t)ui_framebuffers[i], VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT, "ui");
 	}
 
-	//Create VR eye texture.
-	memset(&vr_eye_texture, 0, sizeof(vr_eye_texture));
-	vr_eye_texture.tex_width = vr_render_target_width;
-    vr_eye_texture.tex_height = vr_render_target_height;
-	vr_eye_texture.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    //Create VR eye textures.
+	for (int eye_index = 0; eye_index < 2; ++eye_index)
+    {
+        memset(&vr_eye_texture[eye_index], 0, sizeof(vr_eye_texture[eye_index]));
+	    vr_eye_texture[eye_index].tex_width = vr_render_target_width;
+        vr_eye_texture[eye_index].tex_height = vr_render_target_height;
+	    vr_eye_texture[eye_index].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-	VkImageCreateInfo image_create_info;
-	memset(&image_create_info, 0, sizeof(image_create_info));
-	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_create_info.pNext = nullptr;
-	image_create_info.flags = 0;
-	image_create_info.imageType = VK_IMAGE_TYPE_2D;
-	image_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-	image_create_info.extent.width = vr_render_target_width;
-	image_create_info.extent.height = vr_render_target_height;
-	image_create_info.extent.depth = 1;
-	image_create_info.mipLevels = 1;
-	image_create_info.arrayLayers = 1;
-	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-	image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-	image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	image_create_info.queueFamilyIndexCount = 0;
-	image_create_info.pQueueFamilyIndices = nullptr;
-	image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	    VkImageCreateInfo image_create_info;
+	    memset(&image_create_info, 0, sizeof(image_create_info));
+	    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	    image_create_info.pNext = nullptr;
+	    image_create_info.flags = 0;
+	    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+	    image_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+	    image_create_info.extent.width = vr_render_target_width;
+	    image_create_info.extent.height = vr_render_target_height;
+	    image_create_info.extent.depth = 1;
+	    image_create_info.mipLevels = 1;
+	    image_create_info.arrayLayers = 1;
+	    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	    image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	    image_create_info.queueFamilyIndexCount = 0;
+	    image_create_info.pQueueFamilyIndices = nullptr;
+	    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	
-    err = vkCreateImage(vulkan_globals.device, &image_create_info, nullptr, &vr_eye_texture.image);
-	if (err != VK_SUCCESS)
-		Sys_Error("Unable to create VR eye texture image!");
+        err = vkCreateImage(vulkan_globals.device, &image_create_info, nullptr, &vr_eye_texture[eye_index].image);
+
+	    if (err != VK_SUCCESS)
+		    Sys_Error("Unable to create VR eye texture image!");
     
-	VkMemoryRequirements memory_requirements;
-	vkGetImageMemoryRequirements(vulkan_globals.device, vr_eye_texture.image, &memory_requirements);
+	    VkMemoryRequirements memory_requirements;
+	    vkGetImageMemoryRequirements(vulkan_globals.device, vr_eye_texture[eye_index].image, &memory_requirements);
 	
-	vr_eye_texture.mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	vr_eye_texture.mem_alloc.pNext = nullptr;
-	vr_eye_texture.mem_alloc.allocationSize = memory_requirements.size;
-	vr_eye_texture.mem_alloc.memoryTypeIndex = vulkan_globals.memory_properties.memoryTypeCount + 1;
+	    vr_eye_texture[eye_index].mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	    vr_eye_texture[eye_index].mem_alloc.pNext = nullptr;
+	    vr_eye_texture[eye_index].mem_alloc.allocationSize = memory_requirements.size;
+	    vr_eye_texture[eye_index].mem_alloc.memoryTypeIndex = vulkan_globals.memory_properties.memoryTypeCount + 1;
 
-	//Determine proper memory type.
-	for (uint32_t i = 0; i < vulkan_globals.memory_properties.memoryTypeCount; ++i)
-	{
-		if ((memory_requirements.memoryTypeBits & (1 << i)) == (1 << i))
-		{
-			if ((vulkan_globals.memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-			{
-				vr_eye_texture.mem_alloc.memoryTypeIndex = i;
-				break;
-			}
-		}
-	}
+	    //Determine proper memory type.
+	    for (uint32_t i = 0; i < vulkan_globals.memory_properties.memoryTypeCount; ++i)
+	    {
+		    if ((memory_requirements.memoryTypeBits & (1 << i)) == (1 << i))
+		    {
+			    if ((vulkan_globals.memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+			    {
+				    vr_eye_texture[eye_index].mem_alloc.memoryTypeIndex = i;
+				    break;
+			    }
+		    }
+	    }
 
-	if (vr_eye_texture.mem_alloc.memoryTypeIndex >= vulkan_globals.memory_properties.memoryTypeCount)
-		Sys_Error("Unable to find memory type for eye texture allocation!");
+	    if (vr_eye_texture[eye_index].mem_alloc.memoryTypeIndex >= vulkan_globals.memory_properties.memoryTypeCount)
+		    Sys_Error("Unable to find memory type for eye texture allocation!");
 
-	err = vkAllocateMemory(vulkan_globals.device, &vr_eye_texture.mem_alloc, nullptr, &vr_eye_texture.mem);
-	if (err != VK_SUCCESS)
-		Sys_Error("Unable to allocate VR eye texture image!");
+	    err = vkAllocateMemory(vulkan_globals.device, &vr_eye_texture[eye_index].mem_alloc, nullptr, &vr_eye_texture[eye_index].mem);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("Unable to allocate VR eye texture image!");
 
-	err = vkBindImageMemory(vulkan_globals.device, vr_eye_texture.image, vr_eye_texture.mem, 0);
-	if (err != VK_SUCCESS)
-		Sys_Error("Unable to bind VR eye texture image!");
+	    err = vkBindImageMemory(vulkan_globals.device, vr_eye_texture[eye_index].image, vr_eye_texture[eye_index].mem, 0);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("Unable to bind VR eye texture image!");
 
-	vr_eye_texture.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	    vr_eye_texture[eye_index].imageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-	VkImageSubresourceRange image_subresource_range;
-	memset(&image_subresource_range, 0, sizeof(image_subresource_range));
-	image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	image_subresource_range.baseMipLevel = 0;
-	image_subresource_range.levelCount = 1;
-	image_subresource_range.baseArrayLayer = 0;
-	image_subresource_range.layerCount = 1;
+	    VkImageSubresourceRange image_subresource_range;
+	    memset(&image_subresource_range, 0, sizeof(image_subresource_range));
+	    image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	    image_subresource_range.baseMipLevel = 0;
+	    image_subresource_range.levelCount = 1;
+	    image_subresource_range.baseArrayLayer = 0;
+	    image_subresource_range.layerCount = 1;
 
-	VkImageMemoryBarrier image_memory_barrier;
-	memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
-	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	image_memory_barrier.pNext = nullptr;
-	image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	image_memory_barrier.srcQueueFamilyIndex = 0;
-	image_memory_barrier.dstQueueFamilyIndex = 0;
-	image_memory_barrier.image = vr_eye_texture.image;
-	image_memory_barrier.subresourceRange = image_subresource_range;
+	    VkImageMemoryBarrier image_memory_barrier;
+	    memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	    image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	    image_memory_barrier.pNext = nullptr;
+	    image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	    image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	    image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	    image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	    image_memory_barrier.srcQueueFamilyIndex = 0;
+	    image_memory_barrier.dstQueueFamilyIndex = 0;
+	    image_memory_barrier.image = vr_eye_texture[eye_index].image;
+	    image_memory_barrier.subresourceRange = image_subresource_range;
 
-	//Allocate temporary command buffer to change image layout.
-	VkCommandBuffer command_buffer;
+	    //Allocate temporary command buffer to change image layout.
+	    VkCommandBuffer command_buffer;
 
-	VkCommandBufferAllocateInfo command_buffer_allocate_info;
-	memset(&command_buffer_allocate_info, 0, sizeof(command_buffer_allocate_info));
-	command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	command_buffer_allocate_info.commandPool = transient_command_pool;
-	command_buffer_allocate_info.commandBufferCount = 1;
-	err = vkAllocateCommandBuffers(vulkan_globals.device, &command_buffer_allocate_info, &command_buffer);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkAllocateCommandBuffers failed");
+	    VkCommandBufferAllocateInfo command_buffer_allocate_info;
+	    memset(&command_buffer_allocate_info, 0, sizeof(command_buffer_allocate_info));
+	    command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	    command_buffer_allocate_info.commandPool = transient_command_pool;
+	    command_buffer_allocate_info.commandBufferCount = 1;
+	    err = vkAllocateCommandBuffers(vulkan_globals.device, &command_buffer_allocate_info, &command_buffer);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("vkAllocateCommandBuffers failed");
 
-	VkCommandBufferBeginInfo command_buffer_begin_info;
-	memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
-	command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	err = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkBeginCommandBuffer failed");
+	    VkCommandBufferBeginInfo command_buffer_begin_info;
+	    memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
+	    command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	    err = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("vkBeginCommandBuffer failed");
 
-	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
+	    vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
 
-	err = vkEndCommandBuffer(command_buffer);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkEndCommandBuffer failed");
+	    err = vkEndCommandBuffer(command_buffer);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("vkEndCommandBuffer failed");
 
-	VkSubmitInfo submit_info;
-	memset(&submit_info, 0, sizeof(submit_info));
-	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &command_buffer;
+	    VkSubmitInfo submit_info;
+	    memset(&submit_info, 0, sizeof(submit_info));
+	    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	    submit_info.commandBufferCount = 1;
+	    submit_info.pCommandBuffers = &command_buffer;
 
-	err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, VK_NULL_HANDLE);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkQueueSubmit failed");
+	    err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, VK_NULL_HANDLE);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("vkQueueSubmit failed");
 
-	err = vkDeviceWaitIdle(vulkan_globals.device);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkDeviceWaitIdle failed");
+	    err = vkDeviceWaitIdle(vulkan_globals.device);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("vkDeviceWaitIdle failed");
 
-	vkFreeCommandBuffers(vulkan_globals.device, transient_command_pool, 1, &command_buffer);
+	    vkFreeCommandBuffers(vulkan_globals.device, transient_command_pool, 1, &command_buffer);
 
-	VkImageViewCreateInfo image_view_create_info;
-	memset(&image_view_create_info, 0, sizeof(image_view_create_info));
-	image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	image_view_create_info.pNext = nullptr;
-	image_view_create_info.flags = 0;
-	image_view_create_info.image = vr_eye_texture.image;
-	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	image_view_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-	image_view_create_info.subresourceRange = image_subresource_range;
+	    VkImageViewCreateInfo image_view_create_info;
+	    memset(&image_view_create_info, 0, sizeof(image_view_create_info));
+	    image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	    image_view_create_info.pNext = nullptr;
+	    image_view_create_info.flags = 0;
+	    image_view_create_info.image = vr_eye_texture[eye_index].image;
+	    image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	    image_view_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+	    image_view_create_info.subresourceRange = image_subresource_range;
 	
-	err = vkCreateImageView(vulkan_globals.device, &image_view_create_info, nullptr, &vr_eye_texture.view);
-	if (err != VK_SUCCESS)
-		Sys_Error("Unable to create VR eye texture image view!");
+	    err = vkCreateImageView(vulkan_globals.device, &image_view_create_info, nullptr, &vr_eye_texture[eye_index].view);
+	    if (err != VK_SUCCESS)
+		    Sys_Error("Unable to create VR eye texture image view!");
 
-	Con_Printf("Created %dx%d OpenVR eye texture\n", vr_eye_texture.tex_width, vr_eye_texture.tex_height);
+        Con_Printf("Created %dx%d OpenVR eye texture\n", vr_eye_texture[eye_index].tex_width, vr_eye_texture[eye_index].tex_height);
+    }
 }
 
 /*
@@ -2136,18 +2139,120 @@ void GL_EndRendering (void)
 	vkCmdEndRenderPass(vulkan_globals.command_buffer);
 
     //Transfer drawn image to the OpenVR texture.
+    VkImageSubresourceRange image_subresource_range;
+    VkImageMemoryBarrier image_memory_barrier;
+    VkImageBlit image_blit_region;
 
-	// Transition from COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL  for the OpenVR Submit
-	//TODO.
-	/*
-	set_image_layout( cmd, m_eyeRenderTarget.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
-                         vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eTransferWrite,
-                         vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eAllGraphics );
+    //Set eye texture TRANSFER_SRC_OPTIMAL --> VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL for blitting.
+    memset(&image_subresource_range, 0, sizeof(image_subresource_range));
+	image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_subresource_range.baseMipLevel = 0;
+	image_subresource_range.levelCount = 1;
+	image_subresource_range.baseArrayLayer = 0;
+	image_subresource_range.layerCount = 1;
 
-        set_image_layout( commandBuffer,m_eyeRenderTarget.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eColorAttachmentOptimal,
-                         vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eColorAttachmentWrite,
-                         vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eTransfer );
-	*/
+	memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.pNext = nullptr;
+	image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	image_memory_barrier.srcQueueFamilyIndex = 0;
+	image_memory_barrier.dstQueueFamilyIndex = 0;
+	image_memory_barrier.image = vr_eye_texture[vr_current_eye].image;
+	image_memory_barrier.subresourceRange = image_subresource_range;
+
+    vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
+
+    //Set swapchain image VK_IMAGE_LAYOUT_PRESENT_SRC_KHR --> VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL.
+    memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.pNext = NULL;
+	image_memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.image = swapchain_images[current_command_buffer];
+	image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_memory_barrier.subresourceRange.baseMipLevel = 0;
+	image_memory_barrier.subresourceRange.levelCount = 1;
+	image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+	image_memory_barrier.subresourceRange.layerCount = 1;
+
+	vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
+
+    //Copy image.
+    memset(&image_blit_region, 0, sizeof(image_blit_region));
+    image_blit_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_blit_region.srcSubresource.mipLevel = 0;
+	image_blit_region.srcSubresource.baseArrayLayer = 0;
+	image_blit_region.srcSubresource.layerCount = 1;
+    image_blit_region.srcOffsets[0].x = 0;
+    image_blit_region.srcOffsets[0].y = 0;
+    image_blit_region.srcOffsets[0].z = 0;
+    image_blit_region.srcOffsets[1].x = glwidth;
+    image_blit_region.srcOffsets[1].y = glheight;
+    image_blit_region.srcOffsets[1].z = 0;
+    image_blit_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_blit_region.dstSubresource.mipLevel = 0;
+	image_blit_region.dstSubresource.baseArrayLayer = 0;
+	image_blit_region.dstSubresource.layerCount = 1;
+    image_blit_region.dstOffsets[0].x = 0;
+    image_blit_region.dstOffsets[0].y = 0;
+    image_blit_region.dstOffsets[0].z = 0;
+    image_blit_region.dstOffsets[1].x = vr_eye_texture[vr_current_eye].tex_width;
+    image_blit_region.dstOffsets[1].y = vr_eye_texture[vr_current_eye].tex_height;
+    image_blit_region.dstOffsets[1].z = 0;
+
+    vkCmdBlitImage(vulkan_globals.command_buffer,
+                   swapchain_images[current_command_buffer], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   vr_eye_texture[vr_current_eye].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1, &image_blit_region,
+                   VK_FILTER_LINEAR);
+
+    //Set swapchain image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL --> VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.
+    memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.pNext = NULL;
+	image_memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.image = swapchain_images[current_command_buffer];
+	image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_memory_barrier.subresourceRange.baseMipLevel = 0;
+	image_memory_barrier.subresourceRange.levelCount = 1;
+	image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+	image_memory_barrier.subresourceRange.layerCount = 1;
+
+	vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
+
+    //Set eye texture VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL --> TRANSFER_SRC_OPTIMAL for OpenVR submission.
+    memset(&image_subresource_range, 0, sizeof(image_subresource_range));
+	image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_subresource_range.baseMipLevel = 0;
+	image_subresource_range.levelCount = 1;
+	image_subresource_range.baseArrayLayer = 0;
+	image_subresource_range.layerCount = 1;
+
+	memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.pNext = nullptr;
+	image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	image_memory_barrier.srcQueueFamilyIndex = 0;
+	image_memory_barrier.dstQueueFamilyIndex = 0;
+	image_memory_barrier.image = vr_eye_texture[vr_current_eye].image;
+	image_memory_barrier.subresourceRange = image_subresource_range;
+
+    vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
 
 	err = vkEndCommandBuffer(vulkan_globals.command_buffer);
 	if (err != VK_SUCCESS)
@@ -2203,31 +2308,32 @@ void GL_UpdateVR(void)
     textureBounds.vMax = 1.0f;
 
     vr::VRVulkanTextureData_t vulkanData;
-    vulkanData.m_nImage = (uint64_t)vr_eye_texture.image;
+    vulkanData.m_nImage = (uint64_t)vr_eye_texture[0].image;
     vulkanData.m_pDevice = vulkan_globals.device;
     vulkanData.m_pPhysicalDevice = vulkan_physical_device;
     vulkanData.m_pInstance = vulkan_instance;
     vulkanData.m_pQueue = vulkan_globals.queue;
     vulkanData.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
 
-    vulkanData.m_nWidth = vr_eye_texture.tex_width;
-    vulkanData.m_nHeight = vr_eye_texture.tex_height;
+    vulkanData.m_nWidth = vr_eye_texture[0].tex_width;
+    vulkanData.m_nHeight = vr_eye_texture[0].tex_height;
     vulkanData.m_nFormat = VK_FORMAT_R8G8B8A8_SRGB;
     vulkanData.m_nSampleCount = 1;
 
     vr::Texture_t texture = { &vulkanData, vr::TextureType_Vulkan, vr::ColorSpace_Auto };
 
-    vr::VRCompositor()->Submit(vr::Eye_Left, &texture, &textureBounds);
-    vr::VRCompositor()->Submit(vr::Eye_Right, &texture, &textureBounds);
-    
-    /*
-    vr::EVRCompositorError error = vr::VRCompositor()->Submit(vr_current_eye, &texture, &textureBounds);
+    vr::EVRCompositorError error_left = vr::VRCompositor()->Submit(vr::Eye_Left, &texture, &textureBounds);
 
-    if (error != vr::VRCompositorError_None)
+    vulkanData.m_nImage = (uint64_t)vr_eye_texture[1].image;
+    vulkanData.m_nWidth = vr_eye_texture[1].tex_width;
+    vulkanData.m_nHeight = vr_eye_texture[1].tex_height;
+    
+    vr::EVRCompositorError error_right = vr::VRCompositor()->Submit(vr::Eye_Right, &texture, &textureBounds);
+    
+    if (error_left != vr::VRCompositorError_None || error_right != vr::VRCompositorError_None)
     {
-        Con_Printf("VR compositor submission error %d!\n", error);
+        Sys_Printf("VR compositor submission error %d, %d!\n", error_left, error_right);
     }
-    */
 }
 
 /*
